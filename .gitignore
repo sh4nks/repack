@@ -1,0 +1,8 @@
+repack
+*.png
+*.jpg
+*.cbz
+*.cbr
+*.zip
+tmp/
+main
