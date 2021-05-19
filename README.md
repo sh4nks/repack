@@ -7,17 +7,21 @@ or can't be read from your favorite manga reader!
 # Usage
 
 ```bash
-repack -h
+$ repack -h
+
+A CLI tool for repacking cbr and cbz archives
 
 Usage:
-  repack [command]
-
-Available Commands:
-  help        Help about any command
-  version     Print the version number
+  repack [flags] INPUT_DIR [OUTPUT_DIR]
 
 Flags:
-  -h, --help   help for repack
+      --dry-run           If set, no archives will be repacked
+      --force             Forcefully create the archive by deleting and overwriting any existing files and archives
+  -f, --formats strings   The input formats. Multiple formats are supported - comma separated. (default [cbr])
+  -h, --help              help for repack
+      --no-color          If set, no colors are used for the log message
+      --verbosity int     verbosity level (0-3). 0 = error, 1 = info, 2 = debug (default 1)
+  -v, --version           version for repack
 ```
 
 

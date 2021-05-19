@@ -60,5 +60,5 @@ func ColorizedFormatLevel(i interface{}, noColor bool) string {
 		return fmt.Sprintf(" %-6s", l)
 	}
 	// 14 - because terminal colors are taking up some bytes
-	return fmt.Sprintf(" %-15s", l)
+	return fmt.Sprintf(" %-14s ", l)
 }
