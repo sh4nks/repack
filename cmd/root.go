@@ -73,7 +73,7 @@ var rootCmd = &cobra.Command{
 			}
 		}
 
-		log.Error().Msgf("Using  INPUT_DIR: %s", input_dir)
+		log.Info().Msgf("Using  INPUT_DIR: %s", input_dir)
 		log.Info().Msgf("Using OUTPUT_DIR: %s", output_dir)
 		if utils.PathExists(output_dir) {
 			if !force {
