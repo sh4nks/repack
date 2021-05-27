@@ -10,8 +10,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"repack/app"
-	"repack/utils"
+	"github.com/sh4nks/repack/app"
+	"github.com/sh4nks/repack/utils"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"

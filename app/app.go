@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"repack/utils"
+	"github.com/sh4nks/repack/utils"
 	"strings"
 
 	"github.com/mholt/archiver/v3"

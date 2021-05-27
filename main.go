@@ -1,7 +1,7 @@
 package main
 
 import (
-	"repack/cmd"
+	"github.com/sh4nks/repack/cmd"
 )
 
 func main() {
