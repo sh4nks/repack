@@ -1,11 +1,14 @@
 package app
 
 import (
+	"compress/flate"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
-	"github.com/sh4nks/repack/utils"
 	"strings"
+
+	"github.com/sh4nks/repack/utils"
 
 	"github.com/mholt/archiver/v3"
 	"github.com/rs/zerolog/log"
@@ -14,8 +17,21 @@ import (
 var SupportedFormats []string = []string{"cbr", "cbz"}
 var Version string = "v1.0"
 
+const fsMode fs.FileMode = 0755
+
 type Formats struct {
 	Items []string
+}
+
+type RepackItem struct {
+	// the full path to the source archive
+	src string
+	// the full path to the destination/extraction directory
+	dst string
+	// the extension of the filename
+	ext string
+	// the filename without the file extension
+	name string
 }
 
 type App struct {
@@ -25,6 +41,7 @@ type App struct {
 	formats    *Formats
 	rar        *archiver.Rar
 	zip        *archiver.Zip
+	items      []RepackItem
 }
 
 func New(inputPath string, outputPath string, format []string, force bool) (*App, error) {
@@ -35,13 +52,27 @@ func New(inputPath string, outputPath string, format []string, force bool) (*App
 		return nil, err
 	}
 
+	zip := &archiver.Zip{
+		CompressionLevel:       flate.DefaultCompression,
+		FileMethod:             archiver.Deflate,
+		SelectiveCompression:   true,
+		OverwriteExisting:      force,
+		ImplicitTopLevelFolder: false,
+		MkdirAll:               false,
+	}
+
+	rar := &archiver.Rar{
+		ImplicitTopLevelFolder: false,
+		MkdirAll:               false,
+	}
+
 	return &App{
 		inputPath:  inputPath,
 		outputPath: outputPath,
 		force:      force,
 		formats:    formats,
-		zip:        archiver.NewZip(),
-		rar:        archiver.NewRar(),
+		zip:        zip,
+		rar:        rar,
 	}, nil
 }
 
@@ -57,62 +88,70 @@ func (app *App) Run(dryRun bool) {
 		return
 	}
 
-	for _, path := range archives {
-		log.Info().Msgf("Archive: %s", path)
+	for _, item := range archives {
+		log.Info().Msgf("Archive: %s", item.src)
 
-		dirname, err := app.extract(path)
+		err := app.extract(item)
 		if err != nil {
 			log.Fatal().Msgf("An error occured during extraction: %v", err)
 		}
 
-		app.clean(dirname)
+		app.clean(item.dst)
 
-		err = app.compress(dirname)
+		err = app.compress(item)
 		if err != nil {
 			log.Fatal().Msgf("An error occured during archiving: %v", err)
 		}
 	}
 }
 
-func (app *App) extract(archivePath string) (string, error) {
-	filename := filepath.Base(strings.TrimSuffix(archivePath, filepath.Ext(archivePath)))
-	relToInput, _ := filepath.Rel(app.inputPath, filepath.Dir(archivePath))
-	dirname := filepath.Join(app.outputPath, relToInput, filename)
-
-	if utils.PathExists(dirname) {
+func (app *App) extract(item RepackItem) error {
+	if utils.PathExists(item.dst) {
 		if !app.force {
-			log.Error().Msgf("Can't extract into existing path: %s", dirname)
-			return "", fmt.Errorf("extract: Can't extract into existing path. Use the force Luke!")
+			log.Error().Msgf("Can't extract into existing path: %s", item.dst)
+			return fmt.Errorf("extract: Can't extract into existing path.")
 		}
-		log.Info().Msgf("Deleting existing destination directory %s", dirname)
-		os.RemoveAll(dirname)
+		log.Info().Msgf("Deleting existing destination directory %s", item.dst)
+		os.RemoveAll(item.dst)
 	}
 
-	log.Info().Msgf("Extracting: %s into %s", archivePath, dirname)
-	var err error
-	switch app.formats.GetSuffix(archivePath) {
+	err := os.MkdirAll(item.dst, fsMode)
+	if err != nil {
+		return fmt.Errorf("extract: Couldn't create destination directory: %s", item.dst)
+	}
+
+	log.Info().Msgf("Extracting: %s into %s", item.src, item.dst)
+
+	switch app.formats.GetSuffix(item.ext) {
 	case "cbr":
-		// we extract into the top level folder instead of a folder named like
-		// the archive because the archiver is creating a folder named like
-		// the archive
-		err = app.rar.Unarchive(archivePath, filepath.Dir(dirname))
+		err = app.rar.Unarchive(item.src, item.dst)
 	case "cbz":
-		err = app.zip.Unarchive(archivePath, filepath.Dir(dirname))
+		err = app.zip.Unarchive(item.src, item.dst)
 	}
 
 	if err != nil {
-		return "", err
+		return err
 	}
 
-	return dirname, nil
+	return nil
 }
 
-func (app *App) compress(srcPath string) error {
-	zipArchive := srcPath + ".zip"
-	cbzArchive := srcPath + ".cbz"
+func (app *App) compress(item RepackItem) error {
+	zipArchive := item.dst + ".zip"
+	cbzArchive := item.dst + ".cbz"
 
-	log.Info().Msgf("Compressing: %s", srcPath)
-	err := app.zip.Archive([]string{srcPath}, zipArchive)
+	log.Info().Msgf("Compressing: %s", item.dst)
+
+	// Handle top level archive folders
+	dirs, _ := os.ReadDir(item.dst)
+	var dir string
+	if len(dirs) == 1 {
+		dir = filepath.Join(item.dst, dirs[0].Name())
+	} else {
+		dir = item.dst
+	}
+
+	err := app.zip.Archive([]string{dir}, zipArchive)
 
 	if err != nil {
 		log.Error().Msgf("Can't create archive: %v", err)
@@ -132,8 +171,8 @@ func (app *App) compress(srcPath string) error {
 		return err
 	}
 
-	log.Info().Msgf("Deleting extracted source folder: %s", srcPath)
-	err = os.RemoveAll(srcPath)
+	log.Info().Msgf("Deleting extracted source folder: %s", item.dst)
+	err = os.RemoveAll(item.dst)
 	if err != nil {
 		log.Error().Msgf("compress: couldn't delete source folder: %w", err)
 		return err
@@ -167,8 +206,9 @@ func (app *App) clean(srcPath string) error {
 	return nil
 }
 
-func (app *App) getArchives(path string) []string {
-	archives := []string{}
+func (app *App) getArchives(path string) []RepackItem {
+	archives := []RepackItem{}
+
 	err := filepath.Walk(path,
 		func(path string, info os.FileInfo, err error) error {
 			if err != nil {
@@ -178,7 +218,18 @@ func (app *App) getArchives(path string) []string {
 			if !info.IsDir() {
 				if app.formats.HasSuffix(path) {
 					log.Debug().Msgf("Found archive: %s", path)
-					archives = append(archives, path)
+
+					filename := filepath.Base(strings.TrimSuffix(path, filepath.Ext(path)))
+					relToInput, _ := filepath.Rel(app.inputPath, filepath.Dir(path))
+					dirname := filepath.Join(app.outputPath, relToInput, filename)
+
+					item := RepackItem{
+						src:  path,
+						dst:  dirname,
+						name: filename,
+						ext:  filepath.Ext(path),
+					}
+					archives = append(archives, item)
 				} else {
 					log.Debug().Msgf("Skipping file: %s", path)
 				}
