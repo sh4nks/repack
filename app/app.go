@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/sh4nks/repack/utils"
 
@@ -15,7 +16,7 @@ import (
 )
 
 var SupportedFormats []string = []string{"cbr", "cbz"}
-var Version string = "v1.0"
+var Version string = "v1.1"
 
 const fsMode fs.FileMode = 0755
 
@@ -77,11 +78,15 @@ func New(inputPath string, outputPath string, format []string, force bool) (*App
 }
 
 func (app *App) Run(dryRun bool) {
+	startTime := time.Now()
+
 	archives := app.getArchives(app.inputPath)
 	if len(archives) == 0 {
 		log.Info().Msg("No archives found.")
 		return
 	}
+
+	log.Info().Msgf("Scan: %d archives found", len(archives))
 
 	if dryRun {
 		log.Info().Msg("No further actions executed due to dry-run.")
@@ -103,6 +108,8 @@ func (app *App) Run(dryRun bool) {
 			log.Fatal().Msgf("An error occured during archiving: %v", err)
 		}
 	}
+	elapsedTime := time.Since(startTime)
+	log.Info().Msgf("Finished in %s!", elapsedTime)
 }
 
 func (app *App) extract(item RepackItem) error {
@@ -111,7 +118,7 @@ func (app *App) extract(item RepackItem) error {
 			log.Error().Msgf("Can't extract into existing path: %s", item.dst)
 			return fmt.Errorf("extract: Can't extract into existing path.")
 		}
-		log.Info().Msgf("Deleting existing destination directory %s", item.dst)
+		log.Debug().Msgf("Deleting existing destination directory %s", item.dst)
 		os.RemoveAll(item.dst)
 	}
 
@@ -120,7 +127,7 @@ func (app *App) extract(item RepackItem) error {
 		return fmt.Errorf("extract: Couldn't create destination directory: %s", item.dst)
 	}
 
-	log.Info().Msgf("Extracting: %s into %s", item.src, item.dst)
+	log.Debug().Msgf("Extracting: %s into %s", item.src, item.dst)
 
 	switch app.formats.GetSuffix(item.ext) {
 	case "cbr":
@@ -140,7 +147,7 @@ func (app *App) compress(item RepackItem) error {
 	zipArchive := item.dst + ".zip"
 	cbzArchive := item.dst + ".cbz"
 
-	log.Info().Msgf("Compressing: %s", item.dst)
+	log.Debug().Msgf("Compressing: %s", item.dst)
 
 	// Handle top level archive folders
 	dirs, _ := os.ReadDir(item.dst)
@@ -161,8 +168,8 @@ func (app *App) compress(item RepackItem) error {
 	if utils.PathExists(cbzArchive) && !app.force {
 		log.Error().Msgf("Can't rename .zip to .cbz because there is already a .cbz file at the destination location: %v", cbzArchive)
 		return fmt.Errorf("compress: Can't rename .zip to .cbz")
-	} else {
-		log.Warn().Msgf("Force: Overwritting .cbz file at the destination location: %v", cbzArchive)
+	} else if utils.PathExists(cbzArchive) && app.force {
+		log.Warn().Msgf("Overwritting .cbz file at the destination location: %v", cbzArchive)
 	}
 
 	err = os.Rename(zipArchive, cbzArchive)
@@ -171,7 +178,7 @@ func (app *App) compress(item RepackItem) error {
 		return err
 	}
 
-	log.Info().Msgf("Deleting extracted source folder: %s", item.dst)
+	log.Debug().Msgf("Deleting extracted source folder: %s", item.dst)
 	err = os.RemoveAll(item.dst)
 	if err != nil {
 		log.Error().Msgf("compress: couldn't delete source folder: %w", err)

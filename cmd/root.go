@@ -34,7 +34,7 @@ var rootCmd = &cobra.Command{
 	Args:    cobra.RangeArgs(1, 2),
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		// Setting up logger
-		output := zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339, NoColor: noColor}
+		output := zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.Kitchen, NoColor: noColor}
 		output.FormatLevel = func(i interface{}) string {
 			return utils.ColorizedFormatLevel(i, noColor)
 		}
@@ -79,7 +79,7 @@ var rootCmd = &cobra.Command{
 			if !force {
 				return ErrOutputPathAlreadyExists
 			}
-			log.Warn().Msgf("Force: Overwriting all files in %s", output_dir)
+			log.Warn().Msgf("Overwriting all files in %s", output_dir)
 		}
 
 		app, err := app.New(input_dir, output_dir, formats, force)
